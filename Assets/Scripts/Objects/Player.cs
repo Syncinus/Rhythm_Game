@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -18,11 +19,14 @@ public class Player : MonoBehaviour
 {
     #region Variables
     public static float Angle = 0;
+    public static float InvulnerabilityTime = 0.5f;
 
     public float Speed = 1f;
-    public int TimesHit;
+    public int TimesHit = 0;
 
     private bool SwitchButtonPressed = false;
+    private bool Invulnerable = false;
+    private bool InvulnerabilityFrame = false;
     #endregion
 
     #region Resources
@@ -62,7 +66,34 @@ public class Player : MonoBehaviour
             UnitObject.localScale = Size;
             UnitObject.GetComponent<SpriteRenderer>().sortingOrder = 3;
             UnitObject.GetComponent<SpriteRenderer>().color = CurrentColor;
+            // Add a collider
+            BoxCollider2D Collider = UnitObject.gameObject.AddComponent<BoxCollider2D>();
+            Collider.isTrigger = true;
+            Rigidbody2D Body = UnitObject.gameObject.AddComponent<Rigidbody2D>();
+            Body.isKinematic = true;
+            Body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            // Add the unit class
+            UnitHandler Handler = UnitObject.gameObject.AddComponent<UnitHandler>();
+            Handler.Parent = this;
+
             Units.Add(new PlayerUnit(UnitObject.gameObject, UnitAngle));
+        }
+    }
+
+    public void OnHit(Collider2D Collide)
+    {
+        StartCoroutine(Hit(Collide));
+    }
+
+    IEnumerator Hit(Collider2D Collide)
+    {
+        if (!Invulnerable)
+        {
+            TimesHit++;
+            Invulnerable = true;
+            // TODO: Make configurable by LevelController level
+            yield return new WaitForSeconds(InvulnerabilityTime);
+            Invulnerable = false;
         }
     }
 
@@ -78,6 +109,20 @@ public class Player : MonoBehaviour
             Vector3 Difference = Origin.position - Units[i].Unit.transform.position;
             float LookAngle = Mathf.Atan2(Difference.y, Difference.x) * Mathf.Rad2Deg;
             Units[i].Unit.transform.rotation = Quaternion.Euler(0, 0, LookAngle - 90);
+            // Update invulnerable
+            if (Invulnerable)
+            {
+                if (InvulnerabilityFrame)
+                {
+                    Units[i].Unit.GetComponent<SpriteRenderer>().enabled = false;
+                } else
+                {
+                    Units[i].Unit.GetComponent<SpriteRenderer>().enabled = true;
+                }
+            } else
+            {
+                Units[i].Unit.GetComponent<SpriteRenderer>().enabled = true;
+            }
         }
     }
 
@@ -113,7 +158,7 @@ public class Player : MonoBehaviour
         {
             SwitchButtonPressed = false;
         }
+        InvulnerabilityFrame = !InvulnerabilityFrame;
         UpdateUnits();
     }
-
 }

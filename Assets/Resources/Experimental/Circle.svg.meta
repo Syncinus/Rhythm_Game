@@ -1,35 +1,20 @@
 fileFormatVersion: 2
-guid: 830a0f6cbcb8f724c9e853dfb4e00b37
+guid: 52bf01ab2a599a549b5be895d5ddb6e9
 ScriptedImporter:
-  internalIDToNameTable:
-  - first:
-      1: 100000
-    second: gameObject/LoopingRingC2
-  - first:
-      4: 400000
-    second: gameObject/LoopingRingC2/Transform
-  - first:
-      212: 21200000
-    second: gameObject/LoopingRingC2/SpriteRenderer
-  - first:
-      213: 21300000
-    second: sprite
-  - first:
-      1001: 100100000
-    second: gameObject
+  internalIDToNameTable: []
   externalObjects: {}
   serializedVersion: 2
   userData: 
   assetBundleName: 
   assetBundleVariant: 
   script: {fileID: 11500000, guid: a57477913897c46af95d590f580878bd, type: 3}
-  svgType: 1
+  svgType: 0
   texturedSpriteMeshType: 0
   svgPixelsPerUnit: 100
-  gradientResolution: 128
+  gradientResolution: 64
   alignment: 0
   customPivot: {x: 0, y: 0}
-  generatePhysicsShape: 1
+  generatePhysicsShape: 0
   viewportOptions: 0
   preserveViewport: 0
   advancedMode: 0
@@ -43,7 +28,7 @@ ScriptedImporter:
   maxTangentAngleEnabled: 0
   maxTangentAngle: 5
   keepTextureAspectRatio: 1
-  textureSize: 3600
+  textureSize: 256
   textureWidth: 256
   textureHeight: 256
   wrapMode: 0
@@ -65,6 +50,6 @@ ScriptedImporter:
         y: 0
         width: 0
         height: 0
-      spriteID: e609e6d91747bf14a884e3bb684b4723
+      spriteID: dcf900e5842b9af4aa4ba8c51d35b191
       internalID: 0
     PhysicsOutlines: []

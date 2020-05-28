@@ -71,6 +71,7 @@ namespace LevelData
 
         public bool AcceptsExtraData;
         public bool AcceptsDynamicValues;
+        public bool UseStartPosition;
 
         public string UseDefaults;
 
@@ -83,6 +84,7 @@ namespace LevelData
             AcceptsExtraData = false;
             AcceptsDynamicValues = true;
             NewTimeBlock = false;
+            UseStartPosition = false;
 
             UseDefaults = NodeName;
         }

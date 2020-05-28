@@ -47,10 +47,6 @@ public struct Easing : ILevelParsable
 
     private IEnumerator _Run(Action<float> Execute) {
         float Timer = 0f;
-        if (Timer > Duration)
-        {
-            
-        }
         while (Timer < Duration)
         {
             float Progress = Mathf.Min(Timer / Duration, 1);
@@ -61,8 +57,13 @@ public struct Easing : ILevelParsable
             }
             Execute(Value);
             Timer += Time.deltaTime;
+            // Make sure we always execute with 1
+            if (Progress < 1 && Timer > Duration)
+            {
+                Execute(1);
+            }
             yield return null;
         }
-        Debug.Log(Timer);
+        
     }
 }

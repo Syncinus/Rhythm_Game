@@ -11,6 +11,7 @@ using System.ComponentModel;
 using UnityEngine.Networking;
 using Unity.VectorGraphics;
 using org.mariuszgromada.math.mxparser.mathcollection;
+using System.Reflection;
 
 // TODO:
 // Make Vector2 and Color capable of math and being dynamic properties
@@ -87,10 +88,13 @@ public class LevelController : MonoBehaviour
     #region Variables
     public static Dictionary<string, string> DynamicVariables = new Dictionary<string, string>();
     private static float Extents;
+    private static float StartPosition;
+    private static Transform ScreenCover;
     private EventDefinition[] EventDefinitions;
     private Level CurrentLevel;
-    private float CurrentTime;
     private Queue<LevelFunction> LevelQueue;
+
+    public float CurrentTime;
     #endregion
 
     #region Resources
@@ -110,9 +114,9 @@ public class LevelController : MonoBehaviour
         internal static void LoadResources()
         {
             // Load resources from assets
-            Circle = Resources.Load<Transform>("Circle");
-            Square = Resources.Load<Transform>("Square");
-            BottomPivotSquare = Resources.Load<Transform>("Beam");
+            Circle = Resources.Load<Transform>("Experimental/Circle");
+            Square = Resources.Load<Transform>("Experimental/Square");
+            BottomPivotSquare = Resources.Load<Transform>("Experimental/Beam");
             // Get ProjectileStorage
             ProjectileStorage = GameObject.Find("ProjectileStorage").transform;
         }
@@ -173,7 +177,11 @@ public class LevelController : MonoBehaviour
             Orb.GetComponent<SpriteRenderer>().sortingOrder = Order;
             if (Damage)
             {
-
+                CircleCollider2D Collider = Orb.gameObject.AddComponent<CircleCollider2D>();
+                Collider.isTrigger = true;
+                Rigidbody2D Body = Orb.gameObject.AddComponent<Rigidbody2D>();
+                Body.isKinematic = true;
+                Body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
             }
             return Orb;
         }
@@ -185,7 +193,11 @@ public class LevelController : MonoBehaviour
             Box.GetComponent<SpriteRenderer>().sortingOrder = Order;
             if (Damage)
             {
-                
+                BoxCollider2D Collider = Box.gameObject.AddComponent<BoxCollider2D>();
+                Collider.isTrigger = true;
+                Rigidbody2D Body = Box.gameObject.AddComponent<Rigidbody2D>();
+                Body.isKinematic = true;
+                Body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
             }
             return Box;
         }
@@ -198,7 +210,11 @@ public class LevelController : MonoBehaviour
             Beam.GetComponent<SpriteRenderer>().sortingOrder = Order;
             if (Damage)
             {
-
+                BoxCollider2D Collider = Beam.gameObject.AddComponent<BoxCollider2D>();
+                Collider.isTrigger = true;
+                Rigidbody2D Body = Beam.gameObject.AddComponent<Rigidbody2D>();
+                Body.isKinematic = true;
+                Body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
             }
             return Beam;
         }
@@ -260,6 +276,8 @@ public class LevelController : MonoBehaviour
             // Build the dotted line object
             GameObject Object = new GameObject();
             Transform DottedLine = Object.transform;
+            DottedLine.name = "Dotted Line";
+            DottedLine.parent = ProjectileStorage;
             // Calculate direction and endpoint
             Vector2 Direction = new Vector2(Mathf.Cos(Angle * Mathf.Deg2Rad), Mathf.Sin(Angle * Mathf.Deg2Rad));
             Vector2 EndPoint = new Vector2(Direction.x * Extents, Direction.y * Extents);
@@ -276,6 +294,14 @@ public class LevelController : MonoBehaviour
                 Point += Direction * Spacing;
             }
             return DottedLine;
+        }
+
+        public static void Clear()
+        {
+            foreach (Transform child in ProjectileStorage)
+            {
+                Destroy(child.gameObject);
+            }
         }
     };
     static class ProjectileHandler
@@ -473,7 +499,12 @@ public class LevelController : MonoBehaviour
                 // If it was a dynamic value then deal with it differently by putting
                 // it as a standard type value and stuff
                 Space.Time.CurrentTime += (float)Defined["time"];
-            } else if (Node.Definition.NodeName == "default")
+            }
+            else if (Node.Definition.NodeName == "start_position")
+            {
+                StartPosition = Space.Time.CurrentTime;
+            } 
+            else if (Node.Definition.NodeName == "default")
             {
                 //Screen.currentResolution.refreshRate;
                 string Type = (string)Defined["type"];
@@ -495,7 +526,8 @@ public class LevelController : MonoBehaviour
                         if (IsDynamic)
                         {
                             throw new InvalidOperationException("Defaults does not accept dynamic variables! at defaults for '" + Default.Key + "'");
-                        } else
+                        }
+                        else
                         {
                             for (int j = 0; j < UsedDefaults.Count; j++)
                             {
@@ -512,7 +544,8 @@ public class LevelController : MonoBehaviour
                     }
                 }
                 // Set defaults or something
-            } else
+            }
+            else
             {
                 LevelFunction Function = new LevelFunction(Node.Definition.NodeName, Space.Time.CurrentTime, Defined, DynamicFlags, new Dictionary<string, string>(CompilerVariables));
                 Functions.Add(Function);
@@ -656,8 +689,8 @@ public class LevelController : MonoBehaviour
         CompileExecutionSpace(Space, Functions, ComplierVariables, Defaults);
         // Sort the game functions
         Functions.Sort();
-        // Now convert functions to a queue
-        Queue<LevelFunction> Map = new Queue<LevelFunction>(Functions);
+        // Now convert functions to a queue (and also make them comply with start positions)
+        Queue<LevelFunction> Map = new Queue<LevelFunction>(Functions.FindAll(function => EventDefinitions.FirstOrDefault(definition => definition.NodeName == function.Name).UseStartPosition ? function.Time >= StartPosition : true));
         // Create the level map
         Level GameLevel = new Level(LevelName, LevelCreator, LevelSong, Map);
         return GameLevel;
@@ -703,7 +736,7 @@ public class LevelController : MonoBehaviour
                     string Object = (string)Properties["object"];                    
                     if (Object == "Background")
                     {
-                        Color color = (Color)Properties["Color"];
+                        Color color = (Color)Properties["color"];
                         Camera.main.backgroundColor = color;
                     } 
                     else if (Object == "Core")
@@ -757,33 +790,34 @@ public class LevelController : MonoBehaviour
                     }
                 }
                 break;
+            case "invulnerability":
+                {
+                    float Time = (float)Properties["time"];
+                    Player.InvulnerabilityTime = Time;
+                } break;
             case "flash":
                 {
                     // TODO: Allow multiple flash at once perhaps.
-                    bool Overtop = (bool)Properties["overtop"];
+                    int Order = ((int)Properties["order"]) - 1; // Set this way to make sure it works fine
                     float Duration = (float)Properties["duration"];
                     Color ScreenColor = (Color)Properties["color"];
                     Easing EaseOut = (Easing)Properties["easeOut"];
                     Easing EaseIn = (Easing)Properties["easeIn"];
                     // Flash the screen
-                    Color OldBackgroundColor;
-                    if (Overtop)
-                    {
-                        // TODO: Add overtop system (so that instead of just changing behind the thing it changes at different levels or something (might make it an int and not boolean))
-                        OldBackgroundColor = Color.black;
-                    } else
-                    {
-                        OldBackgroundColor = Camera.main.backgroundColor;
-                    }
+                    ScreenCover.GetComponent<SpriteRenderer>().sortingOrder = Order;
                     EaseIn.Run(progress =>
                     {
-                        Camera.main.backgroundColor = Color.Lerp(OldBackgroundColor, ScreenColor, progress);
+                        ScreenCover.GetComponent<SpriteRenderer>().color = Color.Lerp(Color.clear, ScreenColor, progress);
                     });
-                    yield return new WaitForSeconds(Duration);
+                    yield return new WaitForSeconds(Duration + EaseIn.Duration);
                     EaseOut.Run(progress =>
                     {
-                        Camera.main.backgroundColor = Color.Lerp(ScreenColor, OldBackgroundColor, progress);
+                        ScreenCover.GetComponent<SpriteRenderer>().color = Color.Lerp(ScreenColor, Color.clear, progress);
                     });
+                } break;
+            case "clear":
+                {
+                    Spawn.Clear();
                 } break;
             // Attack types
             case "orb":
@@ -806,6 +840,8 @@ public class LevelController : MonoBehaviour
                     float Speed = (float)Properties["speed"];
                     float Direction = (float)Properties["direction"];
                     float Spacing = (float)Properties["spacing"];
+                    float Delay = (float)Properties["delay"];
+                    bool Invert = (bool)Properties["invert"];
                     int Count = (int)Properties["count"];
                     // Spawn orbs
                     float AngleEnding = 0f;
@@ -816,11 +852,30 @@ public class LevelController : MonoBehaviour
                     {
                         AngleEnding = (Count - 1) * Spacing / 2;
                     }
-                    for (float i = -AngleEnding; i <= AngleEnding; i += Spacing)
+                    if (Invert)
                     {
-                        float Angle = i + Direction;
-                        Transform Orb = Spawn.CreateOrb(OrbColor, OrbSize, OrbOrder);
-                        ProjectileHandler.Fire(Orb, Speed, Angle);
+                        for (float i = AngleEnding; i >= -AngleEnding; i -= Spacing)
+                        {
+                            float Angle = i + Direction;
+                            Transform Orb = Spawn.CreateOrb(OrbColor, OrbSize, OrbOrder);
+                            ProjectileHandler.Fire(Orb, Speed, Angle);
+                            if (Delay != 0)
+                            {
+                                yield return new WaitForSeconds(Delay);
+                            }
+                        }
+                    } else
+                    {
+                        for (float i = -AngleEnding; i <= AngleEnding; i += Spacing)
+                        {
+                            float Angle = i + Direction;
+                            Transform Orb = Spawn.CreateOrb(OrbColor, OrbSize, OrbOrder);
+                            ProjectileHandler.Fire(Orb, Speed, Angle);
+                            if (Delay != 0)
+                            {
+                                yield return new WaitForSeconds(Delay);
+                            }
+                        }
                     }
                 }
                 break;
@@ -830,9 +885,14 @@ public class LevelController : MonoBehaviour
                     float Angle = (float)Properties["angle"];
                     float Width = (float)Properties["width"];
                     float Lifetime = (float)Properties["lifetime"];
+                    float Delay = (float)Properties["delay"];
                     int Order = (int)Properties["order"];
                     Easing EaseOut = (Easing)Properties["easeOut"];
                     // Spawn box for cutter
+                    if (Delay > 0)
+                    {
+                        yield return new WaitForSeconds(Delay);
+                    }
                     Transform Beam = Spawn.CreateBeam(LaserColor, new Vector2(0.5f, 0.5f), Order);
                     Beam.RotateAround(transform.position, new Vector3(0, 0, -1f), Angle);
                     Beam.localScale = new Vector2(Width, Extents);
@@ -856,6 +916,7 @@ public class LevelController : MonoBehaviour
                     float StartAngle = (float)Properties["startAngle"];
                     float EndAngle = (float)Properties["endAngle"];
                     float Lifetime = (float)Properties["lifetime"];
+                    Debug.Log("Indicate");
                     // Spawn cone
                     Transform Cone = Spawn.CreateCone(IndicatorColor, StartAngle, EndAngle);
                     // Apply death clock to cone
@@ -885,9 +946,11 @@ public class LevelController : MonoBehaviour
     {
         yield return StartCoroutine(LoadSong(GameLevel.Song));
         CurrentLevel = GameLevel;
-        CurrentTime = 0;
+        CurrentTime = StartPosition;
         LevelQueue = new Queue<LevelFunction>(CurrentLevel.Map);
+
         GetComponent<AudioSource>().clip = LevelSong;
+        GetComponent<AudioSource>().time = StartPosition;
         GetComponent<AudioSource>().Play();
     }
 
@@ -1035,8 +1098,10 @@ public class LevelController : MonoBehaviour
     {
         // Load resources for internal helper classes
         Spawn.LoadResources();
-        // Figure out screen space extents
-        Extents = Mathf.Max(Camera.main.orthographicSize, Camera.main.orthographicSize * Screen.width / Screen.height);
+        // Find screen cover
+        ScreenCover = GameObject.Find("ScreenCover").transform;
+        // Figure out screen space extents (multiply by 3 to make sure there is never cutoff, ad multiplying by 2 makes it exact)
+        Extents = Mathf.Max(Camera.main.aspect * Camera.main.orthographicSize, Camera.main.orthographicSize) * 3;
         // Create standard dynamic variables
         DynamicVariables.Add("player_direction", "0");
         // Create the EventDefinitions array
@@ -1076,6 +1141,7 @@ public class LevelController : MonoBehaviour
                 AcceptsDynamicValues = false,
                 AcceptsExtraData = true
             },
+            new EventDefinition("start_position", false, new Dictionary<string, KeyValuePair<Type, object>>()),
             // General functions
             new EventDefinition("debug", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
@@ -1100,14 +1166,22 @@ public class LevelController : MonoBehaviour
             {
                 {"speed", new KeyValuePair<Type, object>(typeof(float), 0f) }
             }),
+            new EventDefinition("invulnerability", false, new Dictionary<string, KeyValuePair<Type, object>>
+            {
+                {"time", new KeyValuePair<Type, object>(typeof(float), 0f) }
+            }),
             new EventDefinition("flash", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
-                {"overtop", new KeyValuePair<Type, object>(typeof(bool), 0f) },
+                {"order", new KeyValuePair<Type, object>(typeof(int), 0) },
                 {"duration", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"color", new KeyValuePair<Type, object>(typeof(Color), Color.black) },
                 {"easeIn", new KeyValuePair<Type, object>(typeof(Easing), new Easing("linear", 0)) },
                 {"easeOut", new KeyValuePair<Type, object>(typeof(Easing), new Easing("linear", 0)) }
-            }),
+            })
+            {
+                UseStartPosition = true
+            },
+            new EventDefinition("clear", false, new Dictionary<string, KeyValuePair<Type, object>>()), // Clears all world projectiles
             // Attack types
             new EventDefinition("orb", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
@@ -1116,7 +1190,10 @@ public class LevelController : MonoBehaviour
                 {"order", new KeyValuePair<Type, object>(typeof(int), 0) },
                 {"speed", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"direction", new KeyValuePair<Type, object>(typeof(float), 0f) }
-            }),
+            })
+            {
+                UseStartPosition = true
+            },
             new EventDefinition("orb_spread", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
                 {"color", new KeyValuePair<Type, object>(typeof(Color), Color.black) },
@@ -1125,9 +1202,12 @@ public class LevelController : MonoBehaviour
                 {"speed", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"direction", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"spacing", new KeyValuePair<Type, object>(typeof(float), 0f) },
+                {"delay", new KeyValuePair<Type, object>(typeof(float), 0f) },
+                {"invert", new KeyValuePair<Type, object>(typeof(bool), false) },
                 {"count", new KeyValuePair<Type, object>(typeof(int), 0f) }
             })
             {
+                UseStartPosition = true,
                 UseDefaults = "orb"
             },
             new EventDefinition("laser", false, new Dictionary<string, KeyValuePair<Type, object>>
@@ -1136,9 +1216,24 @@ public class LevelController : MonoBehaviour
                 {"angle", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"width", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"lifetime", new KeyValuePair<Type, object>(typeof(float), 0f) },
+                {"delay", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"order", new KeyValuePair<Type, object>(typeof(int), 0) },
                 {"easeOut", new KeyValuePair<Type, object>(typeof(Easing), new Easing("linear", 0)) }
-            }),
+            })
+            {
+                UseStartPosition = true
+            },
+            new EventDefinition("sweep", false, new Dictionary<string, KeyValuePair<Type, object>>
+            {
+                {"color", new KeyValuePair<Type, object>(typeof(Color), Color.black) },
+                {"angle", new KeyValuePair<Type, object>(typeof(float), 0f) },
+                {"width", new KeyValuePair<Type, object>(typeof(float), 0f) },
+                {"lifetime", new KeyValuePair<Type, object>(typeof(float), 0f) },
+                {"order", new KeyValuePair<Type, object>(typeof(int), 0) },
+                {"easeOut", new KeyValuePair<Type, object>(typeof(Easing), new Easing("linear", 0)) }
+            }) {
+                
+            },
             // Indicators
             new EventDefinition("indicator", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
@@ -1146,7 +1241,10 @@ public class LevelController : MonoBehaviour
                 {"startAngle", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"endAngle", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"lifetime", new KeyValuePair<Type, object>(typeof(float), 0f) }
-            }),
+            })
+            {
+                UseStartPosition = true
+            },
             new EventDefinition("dotted_line", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
                 {"color", new KeyValuePair<Type, object>(typeof(Color), Color.black) },
@@ -1154,13 +1252,16 @@ public class LevelController : MonoBehaviour
                 {"size", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"lifetime", new KeyValuePair<Type, object>(typeof(float), 0f) }
             })
+            {
+                UseStartPosition = true
+            }
         };
     }
 
     // Start up the game (right now we just do testing)
     void Start()
     {
-        Level GameLevel = ParseLevelXML(@"C:\Users\Public\Levels\example.xml");
+        Level GameLevel = ParseLevelXML(@"C:\Users\Public\Levels\dark_sheep.xml");
         StartCoroutine(ExecuteLevel(GameLevel));
     }
 }
