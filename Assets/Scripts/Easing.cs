@@ -29,7 +29,6 @@ public struct Easing : ILevelParsable
     void ILevelParsable.Parse(string Info, Dictionary<string, string> Variables, ref bool IsDynamic)
     {
         string[] Arguments = Info.Split(',');
-        Debug.Log(String.Join(",", Arguments));
         Type = Arguments[0];
         Duration = (float)LevelController.StringCast(typeof(float), Arguments[1], Variables, out IsDynamic);
     }
@@ -46,6 +45,7 @@ public struct Easing : ILevelParsable
     }
 
     private IEnumerator _Run(Action<float> Execute) {
+        Debug.Log("Run");
         float Timer = 0f;
         while (Timer < Duration)
         {

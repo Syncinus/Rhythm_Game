@@ -18,10 +18,12 @@ struct PlayerUnit
 public class Player : MonoBehaviour
 {
     #region Variables
-    public static float Angle = 0;
+    public static float Angle = 0f;
+    public static float Velocity = 0f;
+    public static float Acceleration = 10f;
+    public static float Speed = 1f;
     public static float InvulnerabilityTime = 0.5f;
 
-    public float Speed = 1f;
     public int TimesHit = 0;
 
     private bool SwitchButtonPressed = false;
@@ -33,7 +35,7 @@ public class Player : MonoBehaviour
     public Transform Origin;
 
     private Transform PlayerPrefab;
-    private const float Distance = 16.8f;
+    private const float Distance = 23.6f;
     private Vector2 Size = new Vector2(0.5f, 0.5f);
     private Color CurrentColor = Color.black;
     #endregion
@@ -103,7 +105,7 @@ public class Player : MonoBehaviour
         {
             // Position the unit
             float UnitAngle = -(Angle + Units[i].OffsetAngle - 90) * Mathf.Deg2Rad;
-            Vector3 DirectionVector = new Vector3(Mathf.Cos(UnitAngle), Mathf.Sin(UnitAngle), 0);
+            Vector3 DirectionVector = new Vector3(Mathf.Cos(UnitAngle), Mathf.Sin(UnitAngle), 1);
             Units[i].Unit.transform.position = Vector3.zero + (DirectionVector.normalized * Distance);
             // Make it look at the core
             Vector3 Difference = Origin.position - Units[i].Unit.transform.position;
@@ -129,7 +131,7 @@ public class Player : MonoBehaviour
     void Awake()
     {
         // Load resources
-        PlayerPrefab = Resources.Load<Transform>("Player");
+        PlayerPrefab = Resources.Load<Transform>("PlayerObject");
     }
 
     void Start()
@@ -139,14 +141,31 @@ public class Player : MonoBehaviour
 
     void FixedUpdate()
     {
+        if (Velocity >= Speed)
+        {
+            Velocity = Speed;
+        } else if (Velocity <= -Speed)
+        {
+            Velocity = -Speed;
+        }
+        Angle += Velocity * Time.fixedDeltaTime * 50; // (Maybe undo the * 50 though)
+
+        bool MovedInFrame = false;
         if (Input.GetMouseButton(0) || Input.GetKey(KeyCode.A))
         {
-            Angle += Speed * Time.fixedDeltaTime * 50;
-        }
-        if (Input.GetMouseButton(1) || Input.GetKey(KeyCode.D))
+            Velocity += (Speed / Acceleration);
+            MovedInFrame = true;
+        } else if (Input.GetMouseButton(1) || Input.GetKey(KeyCode.D))
         {
-            Angle -= Speed * Time.fixedDeltaTime * 50;
+            Velocity -= (Speed / Acceleration);
+            MovedInFrame = true;
         }
+        if (!MovedInFrame)
+        {
+            // Just make it not there.
+            Velocity = 0;
+        }
+
         if (Input.GetMouseButton(2) || Input.GetKey(KeyCode.W))
         {
             if (!SwitchButtonPressed)

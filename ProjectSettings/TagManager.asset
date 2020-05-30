@@ -38,6 +38,18 @@ TagManager:
   - 
   - 
   m_SortingLayers:
+  - name: Background
+    uniqueID: 657300937
+    locked: 0
+  - name: Circles
+    uniqueID: 2968757213
+    locked: 0
+  - name: Rings
+    uniqueID: 3374018785
+    locked: 0
   - name: Default
     uniqueID: 0
+    locked: 0
+  - name: Global
+    uniqueID: 1836618815
     locked: 0

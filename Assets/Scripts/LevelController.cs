@@ -90,9 +90,11 @@ public class LevelController : MonoBehaviour
     private static float Extents;
     private static float StartPosition;
     private static Transform ScreenCover;
+    private static Transform Background;
     private EventDefinition[] EventDefinitions;
     private Level CurrentLevel;
     private Queue<LevelFunction> LevelQueue;
+    private Shaker CameraShaker;
 
     public float CurrentTime;
     #endregion
@@ -114,9 +116,9 @@ public class LevelController : MonoBehaviour
         internal static void LoadResources()
         {
             // Load resources from assets
-            Circle = Resources.Load<Transform>("Experimental/Circle");
-            Square = Resources.Load<Transform>("Experimental/Square");
-            BottomPivotSquare = Resources.Load<Transform>("Experimental/Beam");
+            Circle = Resources.Load<Transform>("Experimental/CircleObject");
+            Square = Resources.Load<Transform>("Experimental/SquareObject");
+            BottomPivotSquare = Resources.Load<Transform>("Experimental/BeamObject");
             // Get ProjectileStorage
             ProjectileStorage = GameObject.Find("ProjectileStorage").transform;
         }
@@ -582,7 +584,19 @@ public class LevelController : MonoBehaviour
                 // Do some more stuff here maybe
             }
         }
+    }
 
+    public IEnumerator Wait(float Delay)
+    {
+        if (Delay > 0)
+        {
+            float Timer = 0.0f;
+            do
+            {
+                Timer += Time.deltaTime;
+                yield return null;
+            } while (Timer < Delay);
+        }
     }
 
     // Function which activates the entire game based on XML
@@ -737,6 +751,8 @@ public class LevelController : MonoBehaviour
                     if (Object == "Background")
                     {
                         Color color = (Color)Properties["color"];
+                        Background.GetComponent<SpriteRenderer>().color = color;
+                        // Also change camera background color because it should be changed
                         Camera.main.backgroundColor = color;
                     } 
                     else if (Object == "Core")
@@ -778,9 +794,28 @@ public class LevelController : MonoBehaviour
                 {
                     float Amount = (float)Properties["amount"];
                     // Speed value of 1 is normal
-                    GameObject.Find("Player").GetComponent<Player>().Speed = Amount;
+                    Player.Speed = Amount;
                 }
                 break;
+            case "position":
+                {
+                    float Angle = (float)Properties["angle"];
+                    // Speed value of 1 is normal
+                    Player.Angle = Angle;
+                }
+                break;
+            case "shake":
+                {
+                    float Decay = (float)Properties["decay"];
+                    float Intensity = (float)Properties["intensity"];
+                    // Speed value of 1 is normal
+                    CameraShaker.Shake(Decay, Intensity);
+                }
+                break;
+            case "stop_shake":
+                {
+                    CameraShaker.Stop();
+                } break;
             case "spin":
                 {
                     float Speed = (float)Properties["speed"];
@@ -798,7 +833,7 @@ public class LevelController : MonoBehaviour
             case "flash":
                 {
                     // TODO: Allow multiple flash at once perhaps.
-                    int Order = ((int)Properties["order"]) - 1; // Set this way to make sure it works fine
+                    int Order = ((int)Properties["order"]) - 5; // Set this way to make sure it works fine
                     float Duration = (float)Properties["duration"];
                     Color ScreenColor = (Color)Properties["color"];
                     Easing EaseOut = (Easing)Properties["easeOut"];
@@ -809,7 +844,7 @@ public class LevelController : MonoBehaviour
                     {
                         ScreenCover.GetComponent<SpriteRenderer>().color = Color.Lerp(Color.clear, ScreenColor, progress);
                     });
-                    yield return new WaitForSeconds(Duration + EaseIn.Duration);
+                    yield return StartCoroutine(Wait(Duration + EaseIn.Duration));
                     EaseOut.Run(progress =>
                     {
                         ScreenCover.GetComponent<SpriteRenderer>().color = Color.Lerp(ScreenColor, Color.clear, progress);
@@ -861,7 +896,7 @@ public class LevelController : MonoBehaviour
                             ProjectileHandler.Fire(Orb, Speed, Angle);
                             if (Delay != 0)
                             {
-                                yield return new WaitForSeconds(Delay);
+                                yield return StartCoroutine(Wait(Delay));
                             }
                         }
                     } else
@@ -873,7 +908,7 @@ public class LevelController : MonoBehaviour
                             ProjectileHandler.Fire(Orb, Speed, Angle);
                             if (Delay != 0)
                             {
-                                yield return new WaitForSeconds(Delay);
+                                yield return StartCoroutine(Wait(Delay));
                             }
                         }
                     }
@@ -888,6 +923,7 @@ public class LevelController : MonoBehaviour
                     float Delay = (float)Properties["delay"];
                     int Order = (int)Properties["order"];
                     Easing EaseOut = (Easing)Properties["easeOut"];
+                    Easing EaseIn = (Easing)Properties["easeIn"];
                     // Spawn box for cutter
                     if (Delay > 0)
                     {
@@ -896,15 +932,90 @@ public class LevelController : MonoBehaviour
                     Transform Beam = Spawn.CreateBeam(LaserColor, new Vector2(0.5f, 0.5f), Order);
                     Beam.RotateAround(transform.position, new Vector3(0, 0, -1f), Angle);
                     Beam.localScale = new Vector2(Width, Extents);
-                    yield return new WaitForSeconds(Lifetime);
+                    EaseIn.Run(progress =>
+                    {
+                        Beam.localScale = Vector2.Lerp(new Vector2(0, Extents), new Vector2(Width, Extents), progress);
+                    });
+                    yield return new WaitForSeconds(Lifetime + EaseIn.Duration);
                     EaseOut.Run(progress =>
                     {
-                        if (progress >= 1)
+                        if (Beam != null && Beam.gameObject != null)
                         {
-                            Destroy(Beam.gameObject);
+                            if (progress >= 1)
+                            {
+                                Destroy(Beam.gameObject);
+                            }
+                            else
+                            {
+                                Beam.localScale = Vector2.Lerp(new Vector2(Width, Extents), new Vector2(0, Extents), progress);
+                            }
+                        }
+                    });
+                    
+                } break;
+            case "sweep":
+                {
+                    Color BeamColor = (Color)Properties["color"];
+                    float StartAngle = (float)Properties["startAngle"];
+                    float EndAngle = (float)Properties["endAngle"];
+                    float Width = (float)Properties["width"];
+                    float Delay = (float)Properties["delay"];
+                    int Order = (int)Properties["order"];
+                    bool Invert = (bool)Properties["invert"];
+                    Easing EaseMotion = (Easing)Properties["easeMotion"];
+                    Easing EaseIn = (Easing)Properties["easeIn"];
+                    Easing EaseOut = (Easing)Properties["easeOut"];
+                    if (EndAngle < StartAngle)
+                    {
+                        EndAngle += 360;   
+                    }
+                    float TotalRotation = EndAngle - StartAngle;
+                    if (Delay > 0)
+                    {
+                        yield return StartCoroutine(Wait(Delay));
+                    }
+                    Transform Beam = Spawn.CreateBeam(BeamColor, new Vector2(Width, Extents), Order);
+                    // Put it at the right initial angle
+                    if (Invert)
+                    {
+                        Beam.rotation = Quaternion.Euler(0, 0, StartAngle);
+                    } else
+                    {
+                        Beam.rotation = Quaternion.Euler(0, 0, -StartAngle);
+                    }                    
+                    // Load it in properly
+                    EaseIn.Run(progress =>
+                    {
+                        Debug.Log("Beam run update");
+                        Debug.Log(StartAngle);
+                        Debug.Log(progress);
+                        Beam.localScale = Vector2.Lerp(new Vector2(0, Extents), new Vector2(Width, Extents), progress);
+                    });
+                    yield return StartCoroutine(Wait(EaseIn.Duration));
+                    EaseMotion.Run(progress =>
+                    {
+                        float CurrentAngle = MathFA.Wrap(StartAngle + Mathf.Lerp(0, TotalRotation, progress));
+                        if (Invert)
+                        {
+                            Beam.rotation = Quaternion.Euler(0, 0, CurrentAngle);
                         } else
                         {
-                            Beam.localScale = Vector2.Lerp(new Vector2(Width, Extents), new Vector2(0, Extents), progress);
+                            Beam.rotation = Quaternion.Euler(0, 0, -CurrentAngle);
+                        }
+                    });
+                    yield return StartCoroutine(Wait(EaseMotion.Duration));
+                    EaseOut.Run(progress =>
+                    {
+                        if (Beam && Beam.gameObject)
+                        {
+                            if (progress >= 1)
+                            {
+                                Destroy(Beam.gameObject);
+                            }
+                            else
+                            {
+                                Beam.localScale = Vector2.Lerp(new Vector2(Width, Extents), new Vector2(0, Extents), progress);
+                            }
                         }
                     });
                     
@@ -935,6 +1046,13 @@ public class LevelController : MonoBehaviour
                     // Apply death clock
                     DeathClock Death = DottedLine.gameObject.AddComponent<DeathClock>();
                     Death.Lifetime = Lifetime;
+                } break;
+            // Lighting
+            case "background_light":
+                {
+                    bool Enabled = (bool)Properties["enabled"];
+                    transform.Find("BackgroundLight").gameObject.active = Enabled;
+                    transform.Find("BackgroundLightDisabled").gameObject.active = !Enabled;
                 } break;
         }
         yield return null;
@@ -1098,10 +1216,16 @@ public class LevelController : MonoBehaviour
     {
         // Load resources for internal helper classes
         Spawn.LoadResources();
+        // Get camera shaker
+        CameraShaker = Camera.main.GetComponent<Shaker>();
         // Find screen cover
         ScreenCover = GameObject.Find("ScreenCover").transform;
+        Background = GameObject.Find("Background").transform;
         // Figure out screen space extents (multiply by 3 to make sure there is never cutoff, ad multiplying by 2 makes it exact)
         Extents = Mathf.Max(Camera.main.aspect * Camera.main.orthographicSize, Camera.main.orthographicSize) * 3;
+        // Scale the background properly
+        Background.localScale = new Vector2(Extents, Extents);
+        ScreenCover.localScale = new Vector2(Extents, Extents);
         // Create standard dynamic variables
         DynamicVariables.Add("player_direction", "0");
         // Create the EventDefinitions array
@@ -1156,12 +1280,31 @@ public class LevelController : MonoBehaviour
             }),
             new EventDefinition("units", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
-                {"amount", new KeyValuePair<Type, object>(typeof(int), 0) }
+                {"amount", new KeyValuePair<Type, object>(typeof(int), 0f) }
             }),
             new EventDefinition("speed", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
-                {"amount", new KeyValuePair<Type, object>(typeof(float), 0)  }
+                {"amount", new KeyValuePair<Type, object>(typeof(float), 0f)  }
             }),
+            new EventDefinition("position", false, new Dictionary<string, KeyValuePair<Type, object>>
+            {
+                {"angle", new KeyValuePair<Type, object>(typeof(float), 0f)  }
+            })
+            {
+                UseStartPosition = true  
+            },
+            new EventDefinition("shake", false, new Dictionary<string, KeyValuePair<Type, object>>
+            {
+                {"intensity", new KeyValuePair<Type, object>(typeof(float), 0f)  },
+                {"decay", new KeyValuePair<Type, object>(typeof(float), 0f)  }
+            })
+            {
+                UseStartPosition = true
+            },
+            new EventDefinition("stop_shake", false, new Dictionary<string, KeyValuePair<Type, object>>())
+            {
+                UseStartPosition = true
+            },
             new EventDefinition("spin", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
                 {"speed", new KeyValuePair<Type, object>(typeof(float), 0f) }
@@ -1169,10 +1312,13 @@ public class LevelController : MonoBehaviour
             new EventDefinition("invulnerability", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
                 {"time", new KeyValuePair<Type, object>(typeof(float), 0f) }
-            }),
+            })
+            {
+                UseStartPosition = true
+            },
             new EventDefinition("flash", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
-                {"order", new KeyValuePair<Type, object>(typeof(int), 0) },
+                {"order", new KeyValuePair<Type, object>(typeof(int), 0f) },
                 {"duration", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"color", new KeyValuePair<Type, object>(typeof(Color), Color.black) },
                 {"easeIn", new KeyValuePair<Type, object>(typeof(Easing), new Easing("linear", 0)) },
@@ -1187,7 +1333,7 @@ public class LevelController : MonoBehaviour
             {
                 {"color", new KeyValuePair<Type, object>(typeof(Color), Color.black) },
                 {"size", new KeyValuePair<Type, object>(typeof(Vector2), Vector2.one) },
-                {"order", new KeyValuePair<Type, object>(typeof(int), 0) },
+                {"order", new KeyValuePair<Type, object>(typeof(int), 0f) },
                 {"speed", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"direction", new KeyValuePair<Type, object>(typeof(float), 0f) }
             })
@@ -1218,6 +1364,7 @@ public class LevelController : MonoBehaviour
                 {"lifetime", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"delay", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"order", new KeyValuePair<Type, object>(typeof(int), 0) },
+                {"easeIn", new KeyValuePair<Type, object>(typeof(Easing), new Easing("linear", 0)) },
                 {"easeOut", new KeyValuePair<Type, object>(typeof(Easing), new Easing("linear", 0)) }
             })
             {
@@ -1226,13 +1373,18 @@ public class LevelController : MonoBehaviour
             new EventDefinition("sweep", false, new Dictionary<string, KeyValuePair<Type, object>>
             {
                 {"color", new KeyValuePair<Type, object>(typeof(Color), Color.black) },
-                {"angle", new KeyValuePair<Type, object>(typeof(float), 0f) },
+                {"startAngle", new KeyValuePair<Type, object>(typeof(float), 0f) },
+                {"endAngle", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"width", new KeyValuePair<Type, object>(typeof(float), 0f) },
-                {"lifetime", new KeyValuePair<Type, object>(typeof(float), 0f) },
                 {"order", new KeyValuePair<Type, object>(typeof(int), 0) },
+                {"delay", new KeyValuePair<Type, object>(typeof(float), 0f) },
+                {"invert", new KeyValuePair<Type, object>(typeof(bool), false) },
+                {"easeMotion", new KeyValuePair<Type, object>(typeof(Easing), new Easing("linear", 0)) },
+                {"easeIn", new KeyValuePair<Type, object>(typeof(Easing), new Easing("linear", 0)) },
                 {"easeOut", new KeyValuePair<Type, object>(typeof(Easing), new Easing("linear", 0)) }
             }) {
-                
+                UseStartPosition = true,
+                UseDefaults = "laser"
             },
             // Indicators
             new EventDefinition("indicator", false, new Dictionary<string, KeyValuePair<Type, object>>
@@ -1254,7 +1406,12 @@ public class LevelController : MonoBehaviour
             })
             {
                 UseStartPosition = true
-            }
+            },
+            // Lighting
+            new EventDefinition("background_light", false, new Dictionary<string, KeyValuePair<Type, object>>
+            {
+                {"enabled", new KeyValuePair<Type, object>(typeof(bool), false) }
+            }),
         };
     }
 
